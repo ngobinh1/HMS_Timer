@@ -421,7 +421,7 @@ Giản đồ thời gian xử lý và phát xung nút bấm đồng bộ 1 MHz:
 ---
 
 ## 3.5 Module: `mode_controller`
-**Chức năng:** FSM điều khiển 4 chế độ hoạt động, quản lý bộ đệm chỉnh giờ độc lập (`adj_sec`, `adj_min`, `adj_hour`), bộ định thời 5s Inactivity Timeout, và phát xung nạp song song `load_en`. Vận hành hoàn toàn đồng bộ trên clock 1 MHz.
+**Chức năng:** FSM điều khiển 4 chế độ hoạt động tuân thủ kiến trúc chuẩn 3-always-block (State FF, Next-State Comb, Datapath FF), quản lý bộ đệm chỉnh giờ độc lập (`adj_sec`, `adj_min`, `adj_hour`), bộ định thời 5s Inactivity Timeout, và phát xung nạp song song `load_en`. Vận hành hoàn toàn đồng bộ trên clock 1 MHz.
 
 ### 3.5.1 Sơ đồ khối (Block Diagram)
 

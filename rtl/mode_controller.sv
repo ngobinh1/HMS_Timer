@@ -10,6 +10,7 @@
 //                without asserting load_en (discarding uncommitted edits)
 //              - Commit on Exit: Asserting 1-cycle load_en pulse when completing
 //                the adjustment loop (HOUR -> RUN via sel_pulse)
+//              - Standard 3-Always-Block FSM Architecture (State FF, Next-State Comb, Datapath FF)
 //              - Pure synchronous single-clock domain design (1 MHz)
 // Project: HMS_Timer (Hour-Minute-Second Timer IP Core)
 // Language: SystemVerilog (IEEE 1800 Synthesizable)
@@ -47,6 +48,7 @@ module mode_controller #(
     } state_t;
 
     state_t state_reg;
+    state_t state_next;
 
     // Time edit scratchpad registers
     logic [5:0] r_adj_sec;
@@ -63,16 +65,69 @@ module mode_controller #(
     assign any_button = sel_pulse | up_pulse | down_pulse;
 
     //--------------------------------------------------------------------------
-    // FSM & Inactivity Timeout Sequential Logic (Pure Synchronous)
+    // Block 1: State Register Sequential Logic (always_ff)
     //--------------------------------------------------------------------------
     always_ff @(posedge clk or negedge rstn) begin
         if (!rstn) begin
-            state_reg    <= MODE_RUN;
-            timeout_cnt  <= '0;
-            r_load_en    <= 1'b0;
-            r_adj_sec    <= '0;
-            r_adj_min    <= '0;
-            r_adj_hour   <= '0;
+            state_reg <= MODE_RUN;
+        end else begin
+            state_reg <= state_next;
+        end
+    end
+
+    //--------------------------------------------------------------------------
+    // Block 2: Next-State Combinational Logic (always_comb)
+    //--------------------------------------------------------------------------
+    always_comb begin
+        state_next = state_reg;
+
+        case (state_reg)
+            MODE_RUN: begin
+                if (sel_pulse) begin
+                    state_next = MODE_ADJ_SEC;
+                end
+            end
+
+            MODE_ADJ_SEC: begin
+                if (sel_pulse) begin
+                    state_next = MODE_ADJ_MIN;
+                end else if (!any_button && sec_pulse && (timeout_cnt >= (P_TIMEOUT_SEC - 1))) begin
+                    state_next = MODE_RUN;
+                end
+            end
+
+            MODE_ADJ_MIN: begin
+                if (sel_pulse) begin
+                    state_next = MODE_ADJ_HOUR;
+                end else if (!any_button && sec_pulse && (timeout_cnt >= (P_TIMEOUT_SEC - 1))) begin
+                    state_next = MODE_RUN;
+                end
+            end
+
+            MODE_ADJ_HOUR: begin
+                if (sel_pulse) begin
+                    state_next = MODE_RUN;
+                end else if (!any_button && sec_pulse && (timeout_cnt >= (P_TIMEOUT_SEC - 1))) begin
+                    state_next = MODE_RUN;
+                end
+            end
+
+            default: begin
+                state_next = MODE_RUN;
+            end
+        endcase
+    end
+
+    //--------------------------------------------------------------------------
+    // Block 3: Datapath & Registered Outputs Sequential Logic (always_ff)
+    //--------------------------------------------------------------------------
+    always_ff @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            timeout_cnt <= '0;
+            r_load_en   <= 1'b0;
+            r_adj_sec   <= '0;
+            r_adj_min   <= '0;
+            r_adj_hour  <= '0;
         end else begin
             r_load_en <= 1'b0; // Default inactive 1-cycle pulse
 
@@ -80,7 +135,6 @@ module mode_controller #(
                 MODE_RUN: begin
                     timeout_cnt <= '0;
                     if (sel_pulse) begin
-                        state_reg  <= MODE_ADJ_SEC;
                         r_adj_sec  <= s_cur;
                         r_adj_min  <= m_cur;
                         r_adj_hour <= h_cur;
@@ -90,9 +144,7 @@ module mode_controller #(
                 MODE_ADJ_SEC: begin
                     if (any_button) begin
                         timeout_cnt <= '0; // Reset inactivity timer on user action
-                        if (sel_pulse) begin
-                            state_reg <= MODE_ADJ_MIN;
-                        end else begin
+                        if (!sel_pulse) begin
                             if (up_pulse && !down_pulse) begin
                                 if (r_adj_sec >= 6'd59) begin
                                     r_adj_sec <= '0;
@@ -110,8 +162,6 @@ module mode_controller #(
                         end
                     end else if (sec_pulse) begin
                         if (timeout_cnt >= (P_TIMEOUT_SEC - 1)) begin
-                            // 5s Inactivity reached: Auto-exit & Cancel uncommitted edits
-                            state_reg   <= MODE_RUN;
                             timeout_cnt <= '0;
                         end else begin
                             timeout_cnt <= timeout_cnt + 1'b1;
@@ -122,9 +172,7 @@ module mode_controller #(
                 MODE_ADJ_MIN: begin
                     if (any_button) begin
                         timeout_cnt <= '0; // Reset inactivity timer on user action
-                        if (sel_pulse) begin
-                            state_reg <= MODE_ADJ_HOUR;
-                        end else begin
+                        if (!sel_pulse) begin
                             if (up_pulse && !down_pulse) begin
                                 if (r_adj_min >= 6'd59) begin
                                     r_adj_min <= '0;
@@ -142,8 +190,6 @@ module mode_controller #(
                         end
                     end else if (sec_pulse) begin
                         if (timeout_cnt >= (P_TIMEOUT_SEC - 1)) begin
-                            // 5s Inactivity reached: Auto-exit & Cancel uncommitted edits
-                            state_reg   <= MODE_RUN;
                             timeout_cnt <= '0;
                         end else begin
                             timeout_cnt <= timeout_cnt + 1'b1;
@@ -156,7 +202,6 @@ module mode_controller #(
                         timeout_cnt <= '0; // Reset inactivity timer on user action
                         if (sel_pulse) begin
                             // User committed changes by completing adjustment loop
-                            state_reg   <= MODE_RUN;
                             r_load_en   <= 1'b1; // Trigger parallel load to counters
                             timeout_cnt <= '0;
                         end else begin
@@ -177,8 +222,6 @@ module mode_controller #(
                         end
                     end else if (sec_pulse) begin
                         if (timeout_cnt >= (P_TIMEOUT_SEC - 1)) begin
-                            // 5s Inactivity reached: Auto-exit & Cancel uncommitted edits
-                            state_reg   <= MODE_RUN;
                             timeout_cnt <= '0;
                         end else begin
                             timeout_cnt <= timeout_cnt + 1'b1;
@@ -187,7 +230,6 @@ module mode_controller #(
                 end
 
                 default: begin
-                    state_reg   <= MODE_RUN;
                     timeout_cnt <= '0;
                 end
             endcase
