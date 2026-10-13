@@ -18,25 +18,22 @@
 `timescale 1ns / 1ps
 
 module mode_controller #(
-    parameter int P_TIMEOUT_SEC = 5,
-    parameter int P_SEC_WIDTH   = 6,
-    parameter int P_MIN_WIDTH   = 6,
-    parameter int P_HOUR_WIDTH  = 5
+    parameter int P_TIMEOUT_SEC = 5
 )(
-    input  logic                    clk,          // System Master Clock (1 MHz)
-    input  logic                    rstn,         // Reset, Active-Low
-    input  logic                    sel_pulse,    // 1-Cycle Pulse from Select Button (Debounced)
-    input  logic                    up_pulse,     // 1-Cycle Pulse from Up Button (Debounced)
-    input  logic                    down_pulse,   // 1-Cycle Pulse from Down Button (Debounced)
-    input  logic                    sec_pulse,    // 1-Cycle Pulse from Prescaler (1 Hz)
-    input  logic [P_SEC_WIDTH-1:0]  s_cur,        // Current Real-Time Second from Counter
-    input  logic [P_MIN_WIDTH-1:0]  m_cur,        // Current Real-Time Minute from Counter
-    input  logic [P_HOUR_WIDTH-1:0] h_cur,        // Current Real-Time Hour from Counter
-    output logic [1:0]              adj_mode,     // Current Operating Mode State Output
-    output logic [P_SEC_WIDTH-1:0]  adj_sec,      // Adjusted Second Edit Buffer Output
-    output logic [P_MIN_WIDTH-1:0]  adj_min,      // Adjusted Minute Edit Buffer Output
-    output logic [P_HOUR_WIDTH-1:0] adj_hour,     // Adjusted Hour Edit Buffer Output
-    output logic                    load_en       // 1-Cycle Pulse to Synchronously Load Counters
+    input  logic       clk,          // System Master Clock (1 MHz)
+    input  logic       rstn,         // Reset, Active-Low
+    input  logic       sel_pulse,    // 1-Cycle Pulse from Select Button (Debounced)
+    input  logic       up_pulse,     // 1-Cycle Pulse from Up Button (Debounced)
+    input  logic       down_pulse,   // 1-Cycle Pulse from Down Button (Debounced)
+    input  logic       sec_pulse,    // 1-Cycle Pulse from Prescaler (1 Hz)
+    input  logic [5:0] s_cur,        // Current Real-Time Second from Counter
+    input  logic [5:0] m_cur,        // Current Real-Time Minute from Counter
+    input  logic [4:0] h_cur,        // Current Real-Time Hour from Counter
+    output logic [1:0] adj_mode,     // Current Operating Mode State Output
+    output logic [5:0] adj_sec,      // Adjusted Second Edit Buffer Output
+    output logic [5:0] adj_min,      // Adjusted Minute Edit Buffer Output
+    output logic [4:0] adj_hour,     // Adjusted Hour Edit Buffer Output
+    output logic       load_en       // 1-Cycle Pulse to Synchronously Load Counters
 );
 
     //--------------------------------------------------------------------------
@@ -52,10 +49,10 @@ module mode_controller #(
     state_t state_reg;
 
     // Time edit scratchpad registers
-    logic [P_SEC_WIDTH-1:0]  r_adj_sec;
-    logic [P_MIN_WIDTH-1:0]  r_adj_min;
-    logic [P_HOUR_WIDTH-1:0] r_adj_hour;
-    logic                    r_load_en;
+    logic [5:0] r_adj_sec;
+    logic [5:0] r_adj_min;
+    logic [4:0] r_adj_hour;
+    logic       r_load_en;
 
     // Width of timeout counter
     localparam int PL_TIMEOUT_CNT_WIDTH = (P_TIMEOUT_SEC > 1) ? $clog2(P_TIMEOUT_SEC + 1) : 1;

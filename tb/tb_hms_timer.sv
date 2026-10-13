@@ -31,8 +31,6 @@ module tb_hms_timer;
 
     // Simulation Prescaler setting: 100 cycles per 1 second pulse
     localparam int PL_SIM_CLK_FREQ_HZ   = 100;
-    localparam int PL_SIM_PSC_COUNT_MAX = PL_SIM_CLK_FREQ_HZ - 1;
-    localparam int PL_SIM_PSC_WIDTH     = 20;
 
     // Clock generator
     logic clk;
@@ -42,11 +40,7 @@ module tb_hms_timer;
     end
 
     // Interface instantiation
-    hms_timer_if #(
-        .P_SEC_WIDTH(6),
-        .P_MIN_WIDTH(6),
-        .P_HOUR_WIDTH(5)
-    ) vif (
+    hms_timer_if vif (
         .clk(clk)
     );
 
@@ -54,15 +48,9 @@ module tb_hms_timer;
     hms_timer #(
         .P_CLK_FREQ_HZ        (PL_SIM_CLK_FREQ_HZ),
         .P_PULSE_1KHZ_FREQ_HZ (100),
-        .P_PULSE_1HZ_FREQ_HZ  (1),
-        .P_DIV_1KHZ_MAX       (0),
-        .P_DIV_1HZ_MAX        (PL_SIM_PSC_COUNT_MAX),
         .P_DEBOUNCE_PULSES    (20), // 20 pulses nominal of sampling clock
         .P_DEBOUNCE_TOL_PCT   (10), // ±10% tolerance -> PL_EFFECTIVE_PULSES = 18
-        .P_TIMEOUT_SEC        (5),
-        .P_SEC_WIDTH          (6),
-        .P_MIN_WIDTH          (6),
-        .P_HOUR_WIDTH         (5)
+        .P_TIMEOUT_SEC        (5)
     ) dut (
         .clk       (vif.clk),
         .rstn      (vif.rstn),

@@ -141,17 +141,11 @@ Sơ đồ kiến trúc tổng thể toàn hệ thống `hms_timer` mô tả đ�
 | :--- | :---: | :---: | :---: | :---: | :--- | :--- |
 | `P_CLK_FREQ_HZ` | `int` | `1_000_000` | `100` | `USER-PROVIDED` | Tần số xung nhịp toàn cục hệ thống (1 MHz) | `hms_timer`, `clk_prescaler` |
 | `P_PULSE_1KHZ_FREQ_HZ` | `int` | `1_000` | `100` / Scale | `DERIVED` | Tần số xung lấy mẫu Debounce (1 kHz) | `clk_prescaler`, `hms_timer` |
-| `P_PULSE_1HZ_FREQ_HZ` | `int` | `1` | `1` | `USER-PROVIDED` | Tần số xung chuẩn đếm giây thời gian thực (1 Hz) | `clk_prescaler`, `hms_timer` |
-| `P_DIV_1KHZ_MAX` | `int` | `999` | `0` | `DERIVED` | Ngưỡng đếm tràn của Tầng 1 Prescaler | `clk_prescaler` |
-| `P_DIV_1HZ_MAX` | `int` | `999` | `99` | `DERIVED` | Ngưỡng đếm tràn của Tầng 2 Prescaler | `clk_prescaler` |
 | `P_DEBOUNCE_PULSES` | `int` | `20` | `20` | `USER-PROVIDED` | Số chu kỳ lấy mẫu 1kHz danh định (20 ms) | `button_debouncer`, `button_controller`, `hms_timer` |
 | `P_DEBOUNCE_TOL_PCT`| `int` | `10` | `10` | `USER-PROVIDED` | Dung sai khử rung phím ±10% (18 ms .. 22 ms) | `button_debouncer`, `button_controller`, `hms_timer` |
 | `P_TIMEOUT_SEC` | `int` | `5` | `5` | `USER-PROVIDED` | Ngưỡng thời gian tự động hủy đệm và thoát về RUN (5s) | `mode_controller`, `hms_timer` |
-| `P_SEC_WIDTH` | `int` | `6` | `6` | `DERIVED` | Độ rộng bus dữ liệu Giây (0 .. 59) | `second_counter`, `mode_controller`, `output_switch`, `hms_timer` |
-| `P_MIN_WIDTH` | `int` | `6` | `6` | `DERIVED` | Độ rộng bus dữ liệu Phút (0 .. 59) | `minute_counter`, `mode_controller`, `output_switch`, `hms_timer` |
-| `P_HOUR_WIDTH` | `int` | `5` | `5` | `DERIVED` | Độ rộng bus dữ liệu Giờ (0 .. 23) | `hour_counter`, `mode_controller`, `output_switch`, `hms_timer` |
 
-*Ghi chú: Toàn bộ tham số module bắt buộc tuân thủ tiền tố P_ và hằng số nội bộ tuân thủ tiền tố PL_ theo chuẩn rtl_spec_architect.*
+*Ghi chú: Toàn bộ tham số module bắt buộc tuân thủ tiền tố P_ và hằng số nội bộ tuân thủ tiền tố PL_ theo chuẩn rtl_spec_architect. Các bus dữ liệu giờ, phút, giây được cố định kích thước bit trực tiếp [4:0] và [5:0].*
 
 ---
 
@@ -328,15 +322,15 @@ Sơ đồ phân tầng 2 bộ đếm Modulo-1000 trong `clk_prescaler`:
 | :--- | :---: | :---: | :---: | :---: | :--- | :--- | :---: |
 | `clk` | Input | 1 | Clock | 1 MHz | Xung nhịp hệ thống 1 MHz | Chuẩn | N/A |
 | `rstn` | Input | 1 | Reset | Async (Sync Deassert) | Reset bất đồng bộ tích cực thấp (từ `rstn_sync`) | Chuẩn | `0` |
-| `pulse_1khz` | Output | 1 | Enable | 1 MHz | Xung cho phép 1kHz độ rộng đúng 1 chu kỳ `clk` (1 µs) | Tầng 1 đạt P_DIV_1KHZ_MAX | `0` |
-| `sec_pulse` | Output | 1 | Enable | 1 MHz | Xung chuẩn thời gian thực 1Hz độ rộng 1 chu kỳ `clk` (1 µs) | Tầng 2 đạt P_DIV_1HZ_MAX & pulse_1khz | `0` |
+| `pulse_1khz` | Output | 1 | Enable | 1 MHz | Xung cho phép 1kHz độ rộng đúng 1 chu kỳ `clk` (1 µs) | Tầng 1 đạt chu kỳ chia tần | `0` |
+| `sec_pulse` | Output | 1 | Enable | 1 MHz | Xung chuẩn thời gian thực 1Hz độ rộng 1 chu kỳ `clk` (1 µs) | Tầng 2 đạt chu kỳ chia tần & pulse_1khz | `0` |
 
 *Ghi chú: Tín hiệu pulse_1khz và sec_pulse là các xung active-high có độ rộng đúng 1 chu kỳ clock 1 MHz, hoàn toàn đồng bộ với miền clock gốc.*
 
 ### 3.2.3 Nguyên lý hoạt động (Operating Principle)
-- **Tham số cấu hình:** `P_CLK_FREQ_HZ = 1_000_000`, `P_PULSE_1KHZ_FREQ_HZ = 1_000`, `P_PULSE_1HZ_FREQ_HZ = 1`, `P_DIV_1KHZ_MAX = 999`, `P_DIV_1HZ_MAX = 999`, `P_CNT_1KHZ_WIDTH = 10`, `P_CNT_1HZ_WIDTH = 10`.
-- **Tầng 1 (1 MHz -> 1 kHz):** Sử dụng bộ đếm 10-bit (`r_cnt_1khz`) đếm tuần hoàn từ 0 đến `P_DIV_1KHZ_MAX` (999) theo từng sườn dương của `clk` (1 MHz). Khi `r_cnt_1khz == 999`, mạch tạo xung `pulse_1khz = 1` trong đúng 1 chu kỳ clock.
-- **Tầng 2 (1 kHz -> 1 Hz):** Sử dụng bộ đếm 10-bit (`r_cnt_1hz`) chạy trên `clk` nhưng chỉ tăng giá trị khi có `pulse_1khz == 1`. Khi `r_cnt_1hz == 999` đồng thời có `pulse_1khz == 1`, mạch phát xung chuẩn thời gian thực `sec_pulse = 1` độ rộng đúng 1 chu kỳ clock 1 MHz.
+- **Tham số cấu hình:** `P_CLK_FREQ_HZ = 1_000_000`, `P_PULSE_1KHZ_FREQ_HZ = 1_000`.
+- **Tầng 1 (1 MHz -> 1 kHz):** Sử dụng bộ đếm 20-bit (`r_cnt_1khz`) đếm tuần hoàn từ 0 đến `(P_CLK_FREQ_HZ / P_PULSE_1KHZ_FREQ_HZ - 1)` (999) theo từng sườn dương của `clk` (1 MHz). Khi `r_cnt_1khz == 999`, mạch tạo xung `pulse_1khz = 1` trong đúng 1 chu kỳ clock.
+- **Tầng 2 (1 kHz -> 1 Hz):** Sử dụng bộ đếm 20-bit (`r_cnt_1hz`) chạy trên `clk` nhưng chỉ tăng giá trị khi có `pulse_1khz == 1`. Khi `r_cnt_1hz == (P_PULSE_1KHZ_FREQ_HZ - 1)` (999) đồng thời có `pulse_1khz == 1`, mạch phát xung chuẩn thời gian thực `sec_pulse = 1` độ rộng đúng 1 chu kỳ clock 1 MHz.
 - **Tối ưu PPA:** Bộ đếm Tầng 2 chỉ chuyển mạch với tần số 1 kHz (giảm 99.9% tần số chuyển mạch so với bộ đếm 20-bit trực tiếp ở 1 MHz), đồng thời rút ngắn carry chain cho timing closure.
 
 ### 3.2.4 Giản đồ thời gian (Timing Diagram)
@@ -479,7 +473,7 @@ Sơ đồ khối của FSM điều khiển chế độ và bộ đệm chỉnh g
 | `MODE_ADJ_HOUR (11)` | `any_button == 0` và `sec_pulse == 1` và `timeout_cnt >= 4` | `MODE_RUN (00)` | **Timeout 5s:** Tự động về RUN, **hủy bỏ đệm** (`load_en = 0`), bộ MUX quay lại hiển thị counter nền. |
 | `MODE_ADJ_HOUR (11)` | `any_button == 0` và `sec_pulse == 1` và `timeout_cnt < 4` | `MODE_ADJ_HOUR (11)` | Tăng `timeout_cnt <= timeout_cnt + 1`. |
 
-*Ghi chú: Bộ đếm timeout 5s tự động xóa về 0 mỗi khi người dùng có thao tác bấm phím UP hoặc DOWN (Keep-alive). Tham số cấu hình: P_TIMEOUT_SEC = 5, P_SEC_WIDTH = 6, P_MIN_WIDTH = 6, P_HOUR_WIDTH = 5; Hằng số cục bộ PL_TIMEOUT_CNT_WIDTH = 3.*
+*Ghi chú: Bộ đếm timeout 5s tự động xóa về 0 mỗi khi người dùng có thao tác bấm phím UP hoặc DOWN (Keep-alive). Tham số cấu hình: P_TIMEOUT_SEC = 5; Hằng số cục bộ PL_TIMEOUT_CNT_WIDTH = 3.*
 
 ### 3.5.4 Giản đồ thời gian (Timing Diagram)
 
@@ -512,7 +506,7 @@ Sơ đồ khối của bộ đếm giây `second_counter`:
 | `s_out[5:0]` | Output | 6 | Data Out | 1 MHz | Giá trị giây nền thời gian thực (0 .. 59) | Chuẩn | `6'd0` |
 | `sec_rollover` | Output | 1 | Enable | 1 MHz | Cờ báo tràn giây sang phút (`s_out == 59 & sec_pulse & ~load_en`) | Tích cực mức `1` | `0` |
 
-*Ghi chú: Cờ sec_rollover bị khóa (gated = 0) khi load_en = 1 để tránh kích hoạt nhảy phút ngoài ý muốn khi nạp thời gian. Tham số cấu hình: P_SEC_WIDTH = 6.*
+*Ghi chú: Cờ sec_rollover bị khóa (gated = 0) khi load_en = 1 để tránh kích hoạt nhảy phút ngoài ý muốn khi nạp thời gian. Độ rộng bus dữ liệu được cố định trực tiếp 6-bit [5:0].*
 
 ### 3.6.3 Nguyên lý hoạt động (Operating Principle)
 1. **Nạp Song Song Đồng Bộ (Synchronous Load):** Khi có xung `load_en = 1`, thanh ghi nạp giá trị mới: `r_sec <= load_val`.
@@ -550,7 +544,7 @@ Sơ đồ khối của bộ đếm phút `minute_counter`:
 | `m_out[5:0]` | Output | 6 | Data Out | 1 MHz | Giá trị phút nền thời gian thực (0 .. 59) | Chuẩn | `6'd0` |
 | `min_rollover` | Output | 1 | Enable | 1 MHz | Cờ báo tràn phút sang giờ (`m_out == 59 & sec_rollover & ~load_en`) | Tích cực mức `1` | `0` |
 
-*Ghi chú: Bộ đếm phút tăng 1 đơn vị mỗi khi nhận xung sec_rollover từ second_counter và nạp đè song song khi có load_en = 1. Tham số cấu hình: P_MIN_WIDTH = 6.*
+*Ghi chú: Bộ đếm phút tăng 1 đơn vị mỗi khi nhận xung sec_rollover từ second_counter và nạp đè song song khi có load_en = 1. Độ rộng bus dữ liệu được cố định trực tiếp 6-bit [5:0].*
 
 ### 3.7.3 Nguyên lý hoạt động (Operating Principle)
 1. **Nạp Song Song Đồng Bộ (Synchronous Load):** Khi có `load_en = 1`, thanh ghi nạp giá trị mới: `r_min <= load_val`.
@@ -587,7 +581,7 @@ Sơ đồ khối của bộ đếm giờ `hour_counter`:
 | `load_val[4:0]` | Input | 5 | Data In | 1 MHz | Giá trị giờ mới từ bộ đệm `mode_controller` | 0 .. 23 | `0` |
 | `h_out[4:0]` | Output | 5 | Data Out | 1 MHz | Giá trị giờ nền thời gian thực (0 .. 23) | Chuẩn | `5'd0` |
 
-*Ghi chú: Bộ đếm giờ tăng 1 đơn vị mỗi khi nhận xung min_rollover từ minute_counter và nạp đè song song khi có load_en = 1. Tham số cấu hình: P_HOUR_WIDTH = 5.*
+*Ghi chú: Bộ đếm giờ tăng 1 đơn vị mỗi khi nhận xung min_rollover từ minute_counter và nạp đè song song khi có load_en = 1. Độ rộng bus dữ liệu được cố định trực tiếp 5-bit [4:0].*
 
 ### 3.8.3 Nguyên lý hoạt động (Operating Principle)
 1. **Nạp Song Song Đồng Bộ (Synchronous Load):** Khi có `load_en = 1`, thanh ghi nạp giá trị mới: `r_hour <= load_val`.
@@ -602,7 +596,7 @@ Giản đồ thời gian đếm giờ theo `min_rollover`, tràn nửa đêm 23 
 ---
 
 ## 3.9 Module: `output_switch`
-**Chức năng:** Bộ chuyển mạch đa hợp hiển thị tổ hợp (Combinational Display Multiplexer) lựa chọn giữa giá trị thời gian thực từ các bộ đếm nền (khi ở `PL_MODE_RUN = 2'b00`) và giá trị trong bộ đệm chỉnh sửa (khi ở các chế độ `MODE_ADJ_*`).
+**Chức năng:** Bộ chuyển mạch đa hợp hiển thị tổ hợp (Combinational Display Multiplexer) lựa chọn giữa giá trị thời gian thực từ các bộ đếm nền (khi ở chế độ RUN `adj_mode == 2'b00`) và giá trị trong bộ đệm chỉnh sửa (khi ở các chế độ `MODE_ADJ_*`).
 
 ### 3.9.1 Sơ đồ khối (Block Diagram)
 
@@ -627,13 +621,13 @@ Sơ đồ khối của bộ ghép kênh hiển thị `output_switch`:
 | `m_out[5:0]` | Output | 6 | Data Out | 1 MHz | Giá trị phút đưa ra hiển thị chân Top | 0 .. 59 | `0` |
 | `h_out[4:0]` | Output | 5 | Data Out | 1 MHz | Giá trị giờ đưa ra hiển thị chân Top | 0 .. 23 | `0` |
 
-*Ghi chú: Mạch hoạt động hoàn toàn bằng logic tổ hợp zero-latency, không sử dụng Flip-Flop. Tham số cấu hình: P_SEC_WIDTH = 6, P_MIN_WIDTH = 6, P_HOUR_WIDTH = 5; Tham số cục bộ: PL_MODE_RUN = 2'b00.*
+*Ghi chú: Mạch hoạt động hoàn toàn bằng logic tổ hợp zero-latency, không sử dụng Flip-Flop. Độ rộng bus dữ liệu được chuẩn hóa trực tiếp [5:0] và [4:0].*
 
 ### 3.9.3 Nguyên lý hoạt động (Operating Principle)
 - Khối `output_switch` hoạt động hoàn toàn bằng logic tổ hợp thuần túy (Zero-latency combinational multiplexing), không chứa Flip-Flop:
-  - `s_out = (adj_mode == PL_MODE_RUN) ? s_cnt : s_adj;`
-  - `m_out = (adj_mode == PL_MODE_RUN) ? m_cnt : m_adj;`
-  - `h_out = (adj_mode == PL_MODE_RUN) ? h_cnt : h_adj;`
+  - `s_out = (adj_mode == 2'b00) ? s_cnt : s_adj;`
+  - `m_out = (adj_mode == 2'b00) ? m_cnt : m_adj;`
+  - `h_out = (adj_mode == 2'b00) ? h_cnt : h_adj;`
 
 ### 3.9.4 Giản đồ thời gian (Timing Diagram)
 
