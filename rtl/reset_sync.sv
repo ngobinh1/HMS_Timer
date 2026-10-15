@@ -20,20 +20,20 @@ module reset_sync (
 
     // 2-Stage Synchronizer Flip-Flops
     // Attributes to prevent logic optimization / shift register merging during synthesis
-    (* async_reg = "true" *) logic r_sync_stage1;
-    (* async_reg = "true" *) logic r_sync_stage2;
+    (* async_reg = "true" *) logic meta_rstn;
+    (* async_reg = "true" *) logic sync_rstn;
 
     always_ff @(posedge clk or negedge rstn_async) begin
         if (!rstn_async) begin
-            r_sync_stage1 <= 1'b0;
-            r_sync_stage2 <= 1'b0;
+            meta_rstn <= 1'b0;
+            sync_rstn <= 1'b0;
         end else begin
-            r_sync_stage1 <= 1'b1;
-            r_sync_stage2 <= r_sync_stage1;
+            meta_rstn <= 1'b1;
+            sync_rstn <= meta_rstn;
         end
     end
 
     // Output assignment
-    assign rstn_sync = r_sync_stage2;
+    assign rstn_sync = sync_rstn;
 
 endmodule

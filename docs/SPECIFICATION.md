@@ -30,7 +30,7 @@
 3. [CHƯƠNG 3: ĐẶC TẢ CHI TIẾT TỪNG SUB-MODULE](#chương-3-đặc-tả-chi-tiết-từng-sub-module)
    - 3.1 Module: `reset_sync` (Universal 2-Stage Synchronous Reset Synchronizer)
    - 3.2 Module: `clk_prescaler` (Multi-Stage Cascaded Prescaler 1MHz -> 1kHz -> 1Hz Pulse Generator)
-   - 3.3 Module: `button_debouncer` (Single-Channel Button Debouncer 20ms ±10% with Clock Enable)
+   - 3.3 Module: `button_debouncer` (Single-Channel Button Debouncer 20ms with Clock Enable)
    - 3.4 Module: `button_controller` (Multi-Channel Button Controller & Edge Alignment)
    - 3.5 Module: `mode_controller` (4-State Mode FSM + Edit Buffer + 5s Inactivity Timeout)
    - 3.6 Module: `second_counter` (Continuous Background Modulo-60 Second Counter with Clock Enable)
@@ -49,7 +49,7 @@
 ## 1.1 Tổng quan về thiết kế
 IP Core `hms_timer` là khối sở hữu trí tuệ số (Digital IP Core) phục vụ chức năng đếm và quản lý thời gian thực theo định dạng **Giờ (0..23) : Phút (0..59) : Giây (0..59)**. Thiết kế được tối ưu hóa toàn diện cho các hệ thống SoC (System-on-Chip), vi điều khiển nhúng, thiết bị đeo thông minh (Wearables), thiết bị IoT và các nền tảng FPGA thương mại (AMD/Xilinx, Intel FPGA).
 
-IP Core vận hành trên **miền xung nhịp đồng bộ duy nhất 1 MHz** (chu kỳ 1 µs) và đường reset bất đồng bộ tích cực mức thấp (`rstn`). Hệ thống hỗ trợ giao diện 3 nút bấm điều khiển ngoại vi (`sel_in`, `up_in`, `down_in`) cho phép người dùng chuyển đổi trạng thái và điều chỉnh độc lập từng trường thời gian với cơ chế tự động lặp lại (Auto-Repeat), bộ đệm chỉnh giờ độc lập, bộ chuyển mạch hiển thị chuyên dụng, cùng tính năng tự động thoát và hủy thay đổi sau 5 giây không thao tác (Inactivity Timeout).
+IP Core vận hành trên **miền xung nhịp đồng bộ duy nhất 1 MHz** (chu kỳ 1 µs) và đường reset bất đồng bộ tích cực mức thấp (`rstn`). Hệ thống hỗ trợ giao diện 3 nút bấm điều khiển ngoại vi (`sel_in`, `up_in`, `down_in`) cho phép người dùng chuyển đổi trạng thái và điều chỉnh độc lập từng trường thời gian với cơ chế lọc rung phím hai chiều phát xung sự kiện chuẩn 1 chu kỳ (Single Event Pulse), bộ đệm chỉnh giờ độc lập, bộ chuyển mạch hiển thị chuyên dụng chống glitch 1 chu kỳ, cùng tính năng tự động thoát và hủy thay đổi sau 5 giây không thao tác (Inactivity Timeout).
 
 Kiến trúc **Universal Synchronous Architecture với Pulse Clock Enable** chuẩn hóa toàn bộ Flip-Flop trong hệ thống chạy chung một mạng clock 1 MHz duy nhất, điều khiển tần số chuyển đổi qua các xung Clock Enable 1 chu kỳ, loại bỏ hoàn toàn các tế bào Clock Gating thủ công và bộ quản lý clock tập trung. Top-level module `hms_timer` đóng vai trò 100% thuần kết nối phần cứng (0 logic rời rạc).
 
@@ -67,15 +67,15 @@ Mọi yêu cầu kỹ thuật và quyết định kiến trúc được chuẩn 
 | `REQ-CE-01` | Pulse Clock Enable | `USER-PROVIDED` | Sử dụng các xung Clock Enable 1-cycle (`pulse_1khz`, `sec_pulse`, `sec_rollover`, `min_rollover`, `load_en`) trên miền clock 1 MHz, hỗ trợ Native CE trên FPGA và Auto Clock Gating (ACGI) trên ASIC. |
 | `REQ-PPA-01` | Phân tầng Tần số | `USER-PROVIDED` | Sử dụng bộ chia tần đa tầng (1 MHz -> 1 kHz -> 1 Hz) để giảm tần số chuyển mạch tối đa. |
 | `REQ-DEB-01` | Lọc Rung Phím | `USER-PROVIDED` | Lọc rung phím cơ học danh định 20 ms, chỉ công nhận khi nhấn giữ liên tục. |
-| `REQ-DEB-02` | Tự Động Lặp Lại | `USER-PROVIDED` | Hỗ trợ tính năng Auto-Repeat: Giữ phím liên tục sẽ tự động phát xung tuần hoàn đều đặn. |
-| `REQ-DEB-03` | Dung Sai Khử Rung | `USER-PROVIDED` | Áp dụng dải dung sai ±10% (18 ms .. 22 ms) cho bộ khử rung phím. |
+| `REQ-DEB-02` | Lọc Rung 2 Chiều & Phát Xung Đơn | `USER-PROVIDED` | Khử rung chuyển trạng thái 2 chiều (nhấn/nhả 20 ms), phát duy nhất 1 xung chuẩn 1-cycle master clock khi nhấn phím (Single-Event Pulse, không Auto-Repeat). |
+| `REQ-DEB-03` | Thời Gian Khử Rung | `USER-PROVIDED` | Khử rung phím chuẩn 20 ms (20 pulses @ 1 kHz) cho toàn bộ các nút bấm. |
 | `REQ-FSM-01` | 4 Chế Độ Hoạt Động | `USER-PROVIDED` | FSM tuần hoàn qua `RUN (00)` -> `ADJ_SEC (01)` -> `ADJ_MIN (10)` -> `ADJ_HOUR (11)` -> `RUN (00)`. |
 | `REQ-FSM-02` | Timeout 5 Giây | `USER-PROVIDED` | Sau 5 giây không bấm phím ở các chế độ chỉnh sửa, FSM tự động hủy đệm và quay về `MODE_RUN`. |
 | `REQ-CNT-01` | Đếm Nền Zero-Drift | `USER-PROVIDED` | Các bộ đếm Giây/Phút/Giờ chạy nền liên tục 24/7 chuẩn thời gian thực, không bị dừng hay trôi nhịp khi chỉnh menu. |
 | `REQ-BUF-01` | Bộ Đệm Chỉnh Giờ | `USER-PROVIDED` | Duy trì bộ thanh ghi đệm chỉnh sửa (`adj_sec`, `adj_min`, `adj_hour`) độc lập trong `mode_controller`. |
-| `REQ-MUX-01` | Output Switch MUX | `USER-PROVIDED` | Tách riêng module `output_switch` để chuyển mạch hiển thị: xuất đệm khi chỉnh giờ và xuất counter khi chạy đếm bình thường. |
+| `REQ-MUX-01` | Output Switch Anti-Glitch MUX | `USER-PROVIDED` | Tách riêng module `output_switch` để chuyển mạch hiển thị: xuất đệm khi chỉnh giờ (`MODE_ADJ_*`), xuất counter khi chạy đếm bình thường (`MODE_RUN`), và bypass giữ đệm khi `load_en = 1` để triệt tiêu hoàn toàn glitch 1 chu kỳ khi chuyển chế độ. |
 | `REQ-LD-01` | Synchronous Commit | `USER-PROVIDED` | Khi duyệt hết chu trình chỉnh giờ (`ADJ_HOUR` -> `RUN`), nạp song song toàn bộ thời gian mới vào các counter. |
-| `REQ-PPA-02` | Tối Ưu Debouncer | `DERIVED` | Khối Debouncer nhận xung nhịp 1 MHz với Clock Enable `pulse_1khz`, bộ đếm 5-bit (0 .. 17), cắt giảm 85% năng lượng. |
+| `REQ-PPA-02` | Tối Ưu Debouncer | `DERIVED` | Khối Debouncer nhận xung nhịp 1 MHz với Clock Enable `pulse_1khz`, bộ đếm 5-bit (0 .. 19), cắt giảm 85% năng lượng. |
 | `REQ-PPA-03` | Tối Ưu Prescaler | `DERIVED` | Prescaler 2 tầng 10-bit rút ngắn critical path carry chain, tối ưu Fmax và công suất. |
 | `REQ-GAT-01` | Khóa Cờ Tràn | `RECOMMENDED` | Cờ tràn `sec_rollover` và `min_rollover` chỉ phát đúng 1 chu kỳ clock đồng bộ với `sec_pulse`. |
 | `REQ-UNI-01` | Kiến trúc Đồng bộ Phổ quát | `RECOMMENDED` | Chuẩn hóa kiến trúc miền clock đồng bộ duy nhất (Universal Single-Clock Domain) tương thích 100% cả FPGA (1 BUFG, Native CE) và ASIC (ACGI). |
@@ -95,9 +95,10 @@ Kiến trúc **Universal Synchronous Architecture** mang lại hiệu quả vư�
    - **Tối ưu FPGA:** Toàn bộ hệ thống chỉ tiêu thụ duy nhất **1 Global Clock Buffer (BUFG)**. Các xung điều khiển tần số thấp (`pulse_1khz`, `sec_pulse`, `sec_rollover`, `min_rollover`, `load_en`) kết nối trực tiếp vào chân Clock Enable (`CE`) của Flip-Flop trong logic slice (AMD/Xilinx `FDRE` / Intel LE), đạt hiệu năng định thời tối ưu mà không gây phân mảnh cây clock.
    - **Tối ưu ASIC (Automatic Clock Gating Insertion - ACGI):** Trình tổng hợp logic (Synopsys Design Compiler, Cadence Genus, Yosys) tự động nhận diện cấu trúc `if (clk_en)` để chèn các tế bào ICG chuẩn từ PDK công nghệ (e.g., `sky130_fd_sc_hd__dlclkp_*`), tiết kiệm >99.9% công suất động chân clock trên các bộ đếm tần số thấp mà không cần can thiệp tế bào ICG thủ công trong mã nguồn RTL.
 
-2. **Kiến trúc Tách biệt Bộ Đệm & Chuyển Mạch Hiển Thị (`output_switch`)**:
+2. **Kiến trúc Tách biệt Bộ Đệm & Chuyển Mạch Hiển Thị Chống Glitch (`output_switch`)**:
    - Bộ đệm chỉnh giờ (`adj_sec`, `adj_min`, `adj_hour`) được đặt hoàn toàn trong `mode_controller`.
    - Module `output_switch` hoạt động bằng logic tổ hợp không độ trễ chuyển mạch tức thời.
+   - Tích hợp tín hiệu điều khiển `load_en` để bypass giữ nguyên giá trị bộ đệm trong chu kỳ nạp song song, đảm bảo không có bất kỳ xung nhiễu (glitch) nào xuất hiện tại các cổng ngõ ra `s_out, m_out, h_out` khi chuyển từ chế độ chỉnh giờ sang chạy bình thường.
    - Người dùng quan sát được ngay giá trị đang thay đổi khi bấm nút UP/DOWN mà không can thiệp làm sai lệch bộ đếm nền.
 
 3. **Bộ Đếm Nền Liên Tục Không Trôi Thời Gian (Zero-Drift Clock)**:
@@ -142,7 +143,6 @@ Sơ đồ kiến trúc tổng thể toàn hệ thống `hms_timer` mô tả đ�
 | `P_CLK_FREQ_HZ` | `int` | `1_000_000` | `100` | `USER-PROVIDED` | Tần số xung nhịp toàn cục hệ thống (1 MHz) | `hms_timer`, `clk_prescaler` |
 | `P_PULSE_1KHZ_FREQ_HZ` | `int` | `1_000` | `100` / Scale | `DERIVED` | Tần số xung lấy mẫu Debounce (1 kHz) | `clk_prescaler`, `hms_timer` |
 | `P_DEBOUNCE_PULSES` | `int` | `20` | `20` | `USER-PROVIDED` | Số chu kỳ lấy mẫu 1kHz danh định (20 ms) | `button_debouncer`, `button_controller`, `hms_timer` |
-| `P_DEBOUNCE_TOL_PCT`| `int` | `10` | `10` | `USER-PROVIDED` | Dung sai khử rung phím ±10% (18 ms .. 22 ms) | `button_debouncer`, `button_controller`, `hms_timer` |
 | `P_TIMEOUT_SEC` | `int` | `5` | `5` | `USER-PROVIDED` | Ngưỡng thời gian tự động hủy đệm và thoát về RUN (5s) | `mode_controller`, `hms_timer` |
 
 *Ghi chú: Toàn bộ tham số module bắt buộc tuân thủ tiền tố P_ và hằng số nội bộ tuân thủ tiền tố PL_ theo chuẩn rtl_spec_architect. Các bus dữ liệu giờ, phút, giây được cố định kích thước bit trực tiếp [4:0] và [5:0].*
@@ -174,7 +174,7 @@ Top module `hms_timer` là module cấp cao nhất đóng gói toàn bộ các s
 | `m_out[5:0]` | Output | 6 | Data Out | 1 MHz Sync | Giá trị Phút hiển thị ra ngoại vi (0 .. 59) | Đồng bộ | `6'd0` |
 | `s_out[5:0]` | Output | 6 | Data Out | 1 MHz Sync | Giá trị Giây hiển thị ra ngoại vi (0 .. 59) | Đồng bộ | `6'd0` |
 
-*Ghi chú: Tất cả tín hiệu ngõ vào nút bấm bất đồng bộ đều được đồng bộ hóa và lọc rung phím 20ms ±10% trước khi đưa vào hệ thống.*
+*Ghi chú: Tất cả tín hiệu ngõ vào nút bấm bất đồng bộ đều được đồng bộ hóa và lọc rung phím 20ms trước khi đưa vào hệ thống.*
 
 ---
 
@@ -225,7 +225,7 @@ Top module `hms_timer` là module cấp cao nhất đóng gói toàn bộ các s
 | `up_pulse` | 1 | `u_button_controller` | `u_mode_controller` | Xung 1-cycle sau khi khử rung phím tăng giá trị |
 | `down_pulse` | 1 | `u_button_controller` | `u_mode_controller` | Xung 1-cycle sau khi khử rung phím giảm giá trị |
 | `adj_mode[1:0]` | 2 | `u_mode_controller` | `u_output_switch` | Trạng thái chế độ làm việc hiện tại điều khiển MUX hiển thị |
-| `load_en` | 1 | `u_mode_controller` | `u_second_counter`, `u_minute_counter`, `u_hour_counter` | Xung 1-cycle kích hoạt nạp song song giá trị mới vào counters khi commit |
+| `load_en` | 1 | `u_mode_controller` | `u_second_counter`, `u_minute_counter`, `u_hour_counter`, `u_output_switch` | Xung 1-cycle kích hoạt nạp song song giá trị mới vào counters khi commit và giữ đệm hiển thị chống glitch 1 chu kỳ |
 | `adj_sec[5:0]` | 6 | `u_mode_controller` | `u_output_switch`, `u_second_counter` | Giá trị giây trong bộ đệm chỉnh sửa |
 | `adj_min[5:0]` | 6 | `u_mode_controller` | `u_output_switch`, `u_minute_counter` | Giá trị phút trong bộ đệm chỉnh sửa |
 | `adj_hour[4:0]` | 5 | `u_mode_controller` | `u_output_switch`, `u_hour_counter` | Giá trị giờ trong bộ đệm chỉnh sửa |
@@ -247,11 +247,11 @@ Giản đồ thời gian thể hiện phân tầng tần số và quá trình ph
 
 ![Hình 2.5.1: Giản đồ xung đếm thời gian thực 1Hz và tràn nửa đêm 23:59:59 -> 00:00:00 (WaveDrom)](timing_2_5_1_normal_run.png)
 
-### 2.5.2 Giản đồ Lọc Rung Phím Dung Sai ±10% & Auto-Repeat
+### 2.5.2 Giản đồ Lọc Rung Phím 2 Chiều 20ms & Phát Xung Sự Kiện Đơn Chu Kỳ (Single-Event Pulse)
 
-Giản đồ thời gian minh họa bộ lọc nhiễu rung phím 20 ms ±10% (18 pulses @ 1 kHz) và cơ chế tự động phát xung lặp lại (Auto-Repeat) khi giữ phím:
+Giản đồ thời gian minh họa bộ lọc nhiễu rung phím 20 ms (20 pulses @ 1 kHz) lọc rung 2 chiều xác nhận chuyển trạng thái và phát xung sự kiện đơn chu kỳ (Single-Event Pulse) khi nhấn phím:
 
-![Hình 2.5.2: Giản đồ xung lọc rung phím 18ms (dung sai 10%) và Auto-Repeat (WaveDrom)](timing_2_5_2_debounce_and_auto_repeat.png)
+![Hình 2.5.2: Giản đồ xung lọc rung phím 20ms và phát xung đơn chu kỳ (WaveDrom)](timing_2_5_2_debounce_and_auto_repeat.png)
 
 ### 2.5.3 Giản đồ Chuyển Mạch Hiển Thị & Nạp Đồng Bộ (Edit Buffer & Commit vs Timeout 5s)
 
@@ -291,10 +291,10 @@ Sơ đồ nguyên lý cấu trúc phần cứng bên trong khối `reset_sync`:
 ### 3.1.3 Nguyên lý hoạt động (Operating Principle)
 - **Kiến trúc Asynchronous Assert, Synchronous Deassert 2-FF:** Khối sử dụng 2 tầng D Flip-Flop mắc nối tiếp với thuộc tính tổng hợp `(* async_reg = "true" *)`:
   - Thuộc tính `(* async_reg = "true" *)` chỉ định trình tổng hợp đặt 2 FF gần nhau trong layout vật lý và ngăn chặn việc tối ưu gộp thành thanh ghi dịch (SRL).
-  - Cả 2 tầng FF xác lập reset bất đồng bộ và dịch `1'b1` trên sườn dương `clk`:
-    - Khi `rstn_async == 0`: `r_sync_stage1 <= 1'b0; r_sync_stage2 <= 1'b0;` ngay lập tức (không phụ thuộc xung clock).
-    - Khi `rstn_async == 1`: `r_sync_stage1 <= 1'b1; r_sync_stage2 <= r_sync_stage1;` trên các cạnh `posedge clk`.
-  - Ngõ ra: `rstn_sync = r_sync_stage2;`
+  - Tầng 1 (`meta_rstn`) trực tiếp bắt sự kiện giải trừ reset bất đồng bộ (chịu rủi ro metastability). Tầng 2 (`sync_rstn`) loại bỏ metastability và phát tín hiệu reset đồng bộ.
+    - Khi `rstn_async == 0`: `meta_rstn <= 1'b0; sync_rstn <= 1'b0;` ngay lập tức (không phụ thuộc xung clock).
+    - Khi `rstn_async == 1`: `meta_rstn <= 1'b1; sync_rstn <= meta_rstn;` trên các cạnh `posedge clk`.
+  - Ngõ ra: `rstn_sync = sync_rstn;`
 - **Đồng bộ hóa an toàn:** Tín hiệu `rstn_sync` được đưa đến chân reset bất đồng bộ của tất cả các khối chức năng con tuần tự trong hệ thống, đảm bảo toàn bộ hệ thống khởi động tức thời và thoát reset đồng thời, sạch sẽ sau 2 chu kỳ clock.
 
 ### 3.1.4 Giản đồ thời gian (Timing Diagram)
@@ -342,7 +342,7 @@ Giản đồ thời gian phát xung `pulse_1khz` và `sec_pulse`:
 ---
 
 ## 3.3 Module: `button_debouncer`
-**Chức năng:** Bộ lọc rung phím cơ học đơn kênh hoạt động hoàn toàn trên miền clock 1 MHz với Clock Enable `clk_en` (`pulse_1khz`), áp dụng dải dung sai thời gian danh định 20 ms ±10% (18 ms .. 22 ms) và tự động phát xung tuần hoàn khi giữ phím (Auto-Repeat).
+**Chức năng:** Bộ lọc rung phím cơ học đơn kênh hoạt động hoàn toàn trên miền clock 1 MHz với Clock Enable `clk_en` (`pulse_1khz`), áp dụng cơ chế lọc rung hai chiều xác nhận chuyển trạng thái (Two-Way Transition Qualification) trong 20 ms (20 pulses @ 1 kHz) và phát xung sự kiện chuẩn 1 chu kỳ master clock khi nhấn phím (Single Event Pulse).
 
 ### 3.3.1 Sơ đồ khối (Block Diagram)
 
@@ -362,19 +362,21 @@ Sơ đồ khối của mạch khử rung đơn kênh `button_debouncer`:
 | `btn_in` | Input | 1 | Async In | Async | Tín hiệu nút bấm đầu vào bất đồng bộ | Tích cực mức `1` | N/A |
 | `btn_event` | Output | 1 | Control | 1 MHz | Xung sự kiện hợp lệ độ rộng 1 chu kỳ clock 1 MHz (1 µs) | Tích cực mức `1` | `0` |
 
-*Ghi chú: Bộ đếm 5-bit (0..17) hoạt động trên xung nhịp 1 MHz được kích hoạt bởi clk_en (1 kHz) tương ứng thời gian nhận diện phím hợp lệ 18 ms (20 ms - 10%). Ngõ ra btn_event tự động xóa về 0 sau đúng 1 chu kỳ clock 1 MHz.*
+*Ghi chú: Bộ đếm hoạt động trên xung nhịp 1 MHz được kích hoạt bởi clk_en (1 kHz) tương ứng thời gian nhận diện phím hợp lệ 20 ms. Ngõ ra btn_event tự động xóa về 0 sau đúng 1 chu kỳ clock 1 MHz.*
 
 ### 3.3.3 Nguyên lý hoạt động (Operating Principle)
-- **Tham số & Hằng số:** Tham số cấu hình `P_DEBOUNCE_PULSES = 20`, `P_DEBOUNCE_TOL_PCT = 10`. Hằng số cục bộ `PL_DEBOUNCE_MIN_PULSES = 18`, `PL_EFFECTIVE_PULSES = 18`, `PL_CNT_WIDTH = 5`.
-- **Đồng bộ hóa 2 tầng:** Tín hiệu nút bấm bất đồng bộ `btn_in` đi qua 2 tầng Flip-Flop được lấy mẫu ở mỗi xung `clk_en` để chống hiện tượng bất ổn định (Metastability).
-- **Ngưỡng dung sai ±10%:** Với chu kỳ 20 ms tại tần số lấy mẫu 1 kHz, số chu kỳ danh định là 20 pulses. Dải dung sai ±10% cho phép nhận diện phím hợp lệ từ 18 pulses:
-  `PL_EFFECTIVE_PULSES = P_DEBOUNCE_PULSES - floor(P_DEBOUNCE_PULSES * P_DEBOUNCE_TOL_PCT / 100) = 18 pulses (18 ms)`
-- **Loại bỏ nhiễu rung (< 18 ms):** Nếu phím bị nhả trước khi bộ đếm 5-bit đạt 17 (đếm từ 0 .. 17 là 18 pulses), bộ đếm lập tức bị xóa về 0, không phát xung.
-- **Auto-Repeat (>= 18 ms):** Khi bộ đếm đạt 17, mạch phát xung `btn_event = 1` độ rộng đúng 1 chu kỳ clock 1 MHz. Nếu người dùng tiếp tục giữ phím, bộ đếm tự động reset về 0 và tiếp tục đếm lại 18 pulses để phát xung lặp lại tuần hoàn đều đặn.
+- **Tham số cấu hình:** `P_DEBOUNCE_PULSES = 20`.
+- **Đồng bộ hóa 2 tầng (1 MHz):** Tín hiệu nút bấm bất đồng bộ `btn_in` đi qua 2 tầng Flip-Flop (`meta_btn` và `sync_btn`) có thuộc tính `(* ASYNC_REG = "TRUE" *)`, hoạt động trực tiếp ở xung nhịp hệ thống 1 MHz (`clk`) để giải trừ hiện tượng bất ổn định (Metastability). Tầng 1 (`meta_btn`) trực tiếp nhận tín hiệu nút bấm từ bên ngoài; tầng 2 (`sync_btn`) cung cấp mức tín hiệu ổn định đã đồng bộ hóa sang miền clock 1 MHz.
+- **Lọc rung 2 hướng (Transition Qualification Filter):**
+  - Mạch theo dõi trạng thái nút bấm ổn định hiện tại qua thanh ghi `debounced_btn`.
+  - Khi tín hiệu đồng bộ `sync_btn` trùng với `debounced_btn` (không có chuyển trạng thái), bộ đếm `timer_cnt` được giữ ở 0.
+  - Khi `sync_btn` khác `debounced_btn`, bộ đếm `timer_cnt` đếm các xung kích hoạt `clk_en` (1 kHz). Yêu cầu `P_DEBOUNCE_PULSES` mẫu liên tục (đếm từ 0 đến `COUNT_LIMIT = P_DEBOUNCE_PULSES - 1`) để xác nhận chuyển đổi trạng thái mới (áp dụng cho cả sườn lên khi nhấn và sườn xuống khi nhả phím).
+- **Loại bỏ xung nhiễu glitch (< 20 ms):** Bất kỳ xung nhiễu nào có độ rộng nhỏ hơn 20 ms đều bị reset bộ đếm về 0 ngay khi tín hiệu trả về trạng thái cũ, không làm thay đổi `debounced_btn`.
+- **Phát xung sự kiện (Event Generation):** Khi đạt đủ 20 mẫu liên tục của một lần nhấn phím hợp lệ (`sync_btn == 1'b1`), mạch cập nhật `debounced_btn <= 1'b1`, xóa `timer_cnt <= '0'`, và đồng thời phát xung sự kiện `btn_event = 1` độ rộng đúng 1 chu kỳ clock 1 MHz. Khi nhả phím (`sync_btn == 1'b0`), mạch chỉ cập nhật `debounced_btn <= 1'b0` và không phát xung sự kiện (không Auto-Repeat).
 
 ### 3.3.4 Giản đồ thời gian (Timing Diagram)
 
-Giản đồ thời gian lọc rung phím, loại bỏ xung nhiễu ngắn và phát xung auto-repeat:
+Giản đồ thời gian lọc rung phím 2 chiều, loại bỏ xung nhiễu ngắn và phát xung sự kiện đơn chu kỳ:
 
 ![Hình 3.3.4: Giản đồ xung lọc nhiễu glitch và phát xung kích hoạt button_debouncer (WaveDrom)](timing_3_1_4_button_debouncer.png)
 
@@ -408,7 +410,7 @@ Sơ đồ khối của bộ điều khiển nút bấm `button_controller`:
 *Ghi chú: Ngõ ra sel_pulse, up_pulse, down_pulse là các xung đơn chu kỳ 1 MHz (1 µs) sạch nhiễu được đưa trực tiếp tới FSM.*
 
 ### 3.4.3 Nguyên lý hoạt động (Operating Principle)
-- **Tham số cấu hình:** `P_DEBOUNCE_PULSES = 20`, `P_DEBOUNCE_TOL_PCT = 10`.
+- **Tham số cấu hình:** `P_DEBOUNCE_PULSES = 20`.
 - Module đóng gói 3 instance `button_debouncer` cho 3 ngõ vào phím cơ.
 - Nhờ cơ chế tự động xóa của `button_debouncer`, ngõ ra `btn_event` đã là xung chuẩn 1 chu kỳ clock 1 MHz, được nối trực tiếp tới `sel_pulse`, `up_pulse`, `down_pulse`.
 
@@ -452,7 +454,7 @@ Sơ đồ khối của FSM điều khiển chế độ và bộ đệm chỉnh g
 
 *Ghi chú: Bộ đệm chỉnh giờ độc lập (adj_sec, adj_min, adj_hour) cách ly hoàn toàn với các bộ đếm nền.*
 
-### 3.5.3 Bảng chuyển trạng thái FSM kết hợp Timeout 5s & Buffer Chỉnh Giờ (FSM Table)
+### 3.5.3 Nguyên lý hoạt động (Operating Principle)
 
 **Bảng 3.6: Bảng chuyển trạng thái FSM kết hợp Timeout 5s & Buffer Chỉnh Giờ (FSM State Transition Table)**
 
@@ -474,6 +476,11 @@ Sơ đồ khối của FSM điều khiển chế độ và bộ đệm chỉnh g
 | `MODE_ADJ_HOUR (11)` | `any_button == 0` và `sec_pulse == 1` và `timeout_cnt < 4` | `MODE_ADJ_HOUR (11)` | Tăng `timeout_cnt <= timeout_cnt + 1`. |
 
 *Ghi chú: Bộ đếm timeout 5s tự động xóa về 0 mỗi khi người dùng có thao tác bấm phím UP hoặc DOWN (Keep-alive). Tham số cấu hình: P_TIMEOUT_SEC = 5; Hằng số cục bộ PL_TIMEOUT_CNT_WIDTH = 3.*
+ 
+- **Kiến trúc FSM Chuẩn 3 Always Blocks (3-Always-Block Architecture):**
+  - **Khối 1 (State Register Sequential Logic - `always_ff @(posedge clk or negedge rstn)`):** Chốt trạng thái hoạt động hiện tại `state_reg <= state_next`. Khi reset bất đồng bộ (`!rstn`), `state_reg` được khởi tạo về `MODE_RUN`.
+  - **Khối 2 (Next-State Combinational Logic - `always_comb`):** Tính toán logic chuyển trạng thái `state_next` từ `state_reg`, các xung nút bấm (`sel_pulse`, `any_button`), xung nhịp 1 giây (`sec_pulse`), và trạng thái bộ đếm timeout (`timeout_cnt >= P_TIMEOUT_SEC - 1`). Mặc định gán `state_next = state_reg` tránh tạo latch.
+  - **Khối 3 (Datapath & Registered Outputs Sequential Logic - `always_ff @(posedge clk or negedge rstn)`):** Cập nhật toàn bộ các thanh ghi dữ liệu đệm chỉnh sửa (`r_adj_sec`, `r_adj_min`, `r_adj_hour`), bộ đếm thời gian chờ `timeout_cnt`, và xung nạp đồng bộ `r_load_en` (mặc định xóa về `0` sau 1 chu kỳ clock).
 
 ### 3.5.4 Giản đồ thời gian (Timing Diagram)
 
@@ -610,6 +617,7 @@ Sơ đồ khối của bộ ghép kênh hiển thị `output_switch`:
 
 | Tên chân tín hiệu | Hướng | Số bit | Loại | Miền Clock | Mô tả chức năng chi tiết | Điều kiện hợp lệ | Giá trị Reset |
 | :--- | :---: | :---: | :---: | :---: | :--- | :--- | :---: |
+| `load_en` | Input | 1 | Control | 1 MHz | Xung 1-cycle kích hoạt nạp thời gian mới (giữ đệm hiển thị chống glitch) | Tích cực mức `1` | `0` |
 | `adj_mode[1:0]` | Input | 2 | Status | 1 MHz | Mã trạng thái chế độ hoạt động hiện tại | `00`:RUN, `01`:SEC, `10`:MIN, `11`:HOUR | `2'b00` |
 | `s_cnt[5:0]` | Input | 6 | Data In | 1 MHz | Giá trị giây thời gian thực từ `second_counter` | 0 .. 59 | `0` |
 | `m_cnt[5:0]` | Input | 6 | Data In | 1 MHz | Giá trị phút thời gian thực từ `minute_counter` | 0 .. 59 | `0` |
@@ -625,9 +633,10 @@ Sơ đồ khối của bộ ghép kênh hiển thị `output_switch`:
 
 ### 3.9.3 Nguyên lý hoạt động (Operating Principle)
 - Khối `output_switch` hoạt động hoàn toàn bằng logic tổ hợp thuần túy (Zero-latency combinational multiplexing), không chứa Flip-Flop:
-  - `s_out = (adj_mode == 2'b00) ? s_cnt : s_adj;`
-  - `m_out = (adj_mode == 2'b00) ? m_cnt : m_adj;`
-  - `h_out = (adj_mode == 2'b00) ? h_cnt : h_adj;`
+  - `s_out = (adj_mode == 2'b00 && !load_en) ? s_cnt : s_adj;`
+  - `m_out = (adj_mode == 2'b00 && !load_en) ? m_cnt : m_adj;`
+  - `h_out = (adj_mode == 2'b00 && !load_en) ? h_cnt : h_adj;`
+- **Cơ chế chống Glitch hiển thị khi chuyển chế độ (Anti-Glitch Display Bypass):** Khi kết thúc vòng chỉnh giờ và nhấn phím SEL để chuyển từ `MODE_ADJ_HOUR` về `MODE_RUN`, tín hiệu `adj_mode` chuyển sang `2'b00` đồng thời xung `load_en` được phát trong 1 chu kỳ clock. Do các bộ đếm cần 1 chu kỳ clock để nạp giá trị mới vào Flip-Flop, điều kiện `!load_en` đảm bảo `output_switch` tiếp tục giữ hiển thị giá trị từ bộ đệm `s_adj, m_adj, h_adj` thêm đúng 1 chu kỳ, loại bỏ hoàn toàn hiện tượng hiển thị thoáng qua (glitch) giá trị cũ của bộ đếm ngầm.
 
 ### 3.9.4 Giản đồ thời gian (Timing Diagram)
 
@@ -649,15 +658,15 @@ Giản đồ thời gian chuyển mạch hiển thị không độ trễ giữa 
 | `REQ-CE-01` | `USER` | `clk_prescaler.sv` | `TC2: Prescaler Pulse Clock Enables`| Timing + Cycle Verification | Prescaler Monitor | **PASSED (100%)** |
 | `REQ-PPA-01` | `USER` | `clk_prescaler.sv` | `TC2: Cascaded Prescaler 1kHz/1Hz`| Timing + Cycle Verification | Prescaler Monitor | **PASSED (100%)** |
 | `REQ-DEB-01` | `USER` | `button_debouncer.sv` | `TC12: Debounce 20ms Short vs Full`| Threshold Injection | Pulse Counter | **PASSED (100%)** |
-| `REQ-DEB-02` | `USER` | `button_debouncer.sv` | `TC12: Auto-Repeat Long Hold` | Continuous Multi-Cycle Check| Auto-Repeat Monitor | **PASSED (100%)** |
-| `REQ-DEB-03` | `USER` | `button_debouncer.sv` | `TC12: 10% Debounce Tolerance Band`| Boundary Value (17, 18, 22) | Tolerance Check | **PASSED (100%)** |
+| `REQ-DEB-02` | `USER` | `button_debouncer.sv` | `TC12: Single-Event Long Hold` | Continuous Multi-Cycle Check| Single-Event Monitor | **PASSED (100%)** |
+| `REQ-DEB-03` | `USER` | `button_debouncer.sv` | `TC12: Debounce 20ms & Noise Filter`| Boundary Check (<20, >=20) | Noise Rejection Check | **PASSED (100%)** |
 | `REQ-FSM-01` | `USER` | `mode_controller.sv` | `TC3: FSM State Flow Navigation` | SVA + FSM State Monitor | `fsm_mode_cg` | **PASSED (100%)** |
 | `REQ-FSM-02` | `USER` | `mode_controller.sv` | `TC13, TC14: Timeout & Keep-alive`| Inactivity Timer Monitor | Scoreboard Check | **PASSED (100%)** |
 | `REQ-CNT-01` | `USER` | `second/minute/hour` | `TC2, TC4, TC10: Real-Time Zero-Drift`| Scoreboard Cycle Compare | Golden Reference | **PASSED (100%)** |
 | `REQ-BUF-01` | `USER` | `mode_controller.sv` | `TC4, TC5, TC6: Up/Down Wrap-Around`| Boundary Value Tracking | Range Assertions | **PASSED (100%)** |
 | `REQ-MUX-01` | `USER` | `output_switch.sv` | `TC4, TC5, TC6, TC13: MUX Switch` | Output Switch Probe Check | MUX Assertion | **PASSED (100%)** |
 | `REQ-LD-01` | `USER` | `hms_timer.sv` | `TC10, TC14: Synchronous Parallel Load`| Commit Pulse + Load Compare| `p_sec_rollover_sync`| **PASSED (100%)** |
-| `REQ-PPA-02` | `DERIVED`| `button_debouncer.sv` | `TC12: Debounce 20ms & Auto-Repeat`| Clock Pin Toggle Tracking | 1kHz Clock Check | **PASSED (100%)** |
+| `REQ-PPA-02` | `DERIVED`| `button_debouncer.sv` | `TC12: Single-Event Verification`| Clock Pin Toggle Tracking | 1kHz Clock Check | **PASSED (100%)** |
 | `REQ-PPA-03` | `DERIVED`| `clk_prescaler.sv` | `TC2: Cascaded Prescaler 1kHz/1Hz` | Timing Slack Analysis | Stage 1/2 Check | **PASSED (100%)** |
 | `REQ-GAT-01` | `RECOM` | `second/minute_counter`| `TC7: Adjustment Isolation Gating` | Rollover Assertion Check | `assert_sec_rollover_sync`| **PASSED (100%)** |
 | `REQ-CON-01` | `RECOM` | `mode_controller.sv` | `TC8: Simultaneous Press Conflict`| Parallel Stimulus Driving | Value Hold Monitor | **PASSED (100%)** |
@@ -682,7 +691,7 @@ Giản đồ thời gian chuyển mạch hiển thị không độ trễ giữa 
 9. **TC9: Kiểm chứng Miễn nhiễm Glitch bất đồng bộ (Asynchronous Narrow Glitch Immunity):** Bơm xung glitch < 1 cycle, hệ thống bỏ qua hoàn toàn.
 10. **TC10: Kiểm chứng Tràn qua nửa đêm (23:59:59 Midnight Full Cascade Rollover):** Chỉnh giờ 23:59:58, commit nạp vào counter và đếm thời gian thực qua 23:59:59 -> 00:00:00.
 11. **TC11: Kiểm chứng Miễn nhiễm phím bấm ở Chế độ RUN (Inactive Button Immunity):** Nhấn UP/DOWN trong RUN không gây sai lệch.
-12. **TC12: Kiểm chứng Khử rung 20ms Dung sai ±10% & Auto-Repeat:** Nhấn < 18ms (17 pulses) bị hủy hoàn toàn, giữ >= 18ms phát đúng 1 xung, giữ lâu phát Auto-Repeat đều đặn.
+12. **TC12: Kiểm chứng Khử rung 20ms & Phát xung đơn chu kỳ (Single Event Verification):** Nhấn giữ < 20ms (19 xung mẫu) bị hủy hoàn toàn (chống rung/nhiễu), nhấn giữ >= 20ms (20 xung mẫu) phát đúng duy nhất 1 xung kích hoạt `btn_event` (1 chu kỳ clock hệ thống), giữ nút liên tục trong thời gian dài (60 chu kỳ) không tự động lặp (no auto-repeat), giải trừ nhấn nhả hoàn toàn trước khi tiếp nhận lần bấm kế tiếp.
 13. **TC13: Kiểm chứng Timeout 5s & Đếm nền Zero-Drift:** Chỉnh dở dang Giây, Phút, Giờ rồi chờ 5s, thời gian tự động hủy đệm và bộ MUX chuyển về counter nền đang chạy chính xác.
 14. **TC14: Kiểm chứng Giữ trạng thái Timeout khi có thao tác (Timeout Keep-Alive Reset):** Bấm phím sau mỗi 3s (< 5s), timer timeout bị reset và duy trì chế độ chỉnh sửa.
 
@@ -694,11 +703,11 @@ Giản đồ thời gian chuyển mạch hiển thị không độ trễ giữa 
 
 | Hạng mục kiểm tra | Tổng số kiểm tra | Đạt (Passed) | Thất bại (Failed) | Tỷ lệ hoàn thành |
 | :--- | :---: | :---: | :---: | :---: |
-| **Tổng số Assertions & Checks** | 90 | 90 | 0 | **100.0%** |
+| **Tổng số Assertions & Checks** | 89 | 89 | 0 | **100.0%** |
 | **Độ bao phủ chuyển trạng thái FSM (FSM Coverage)** | - | - | - | **100.0%** |
 | **Độ bao phủ dải giá trị biên (Boundary Coverage)** | - | - | - | **100.0%** |
 | **Độ bao phủ kích thích & Chéo (Cross Coverage)** | - | - | - | **90.18%** |
 | **Tổng số SVA SystemVerilog Assertions** | 6 | 6 | 0 | **100.0%** |
 | **Trạng thái kiểm chứng tổng thể** | - | - | - | **PASSED (TAPE-OUT READY)** |
 
-*Ghi chú: Kết quả kiểm chứng đạt 100% Passed trên bộ 14 Functional Test Cases với 90/90 Assertions thành công.*
+*Ghi chú: Kết quả kiểm chứng đạt 100% Passed trên bộ 14 Functional Test Cases với 89/89 Assertions & Checks thành công.*

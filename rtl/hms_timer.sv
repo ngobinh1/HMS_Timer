@@ -5,7 +5,7 @@
 //              - Single synchronous 1 MHz master clock domain throughout the entire IP core
 //              - Asynchronous active-low reset (rstn) synchronized via 2-stage FF
 //              - Cascaded Prescaler generating 1-cycle Clock Enable pulses (1 kHz, 1 Hz)
-//              - 1 kHz Clock-Enabled Button Debouncers with ±10% tolerance (18..22ms)
+//              - 1 kHz Clock-Enabled Button Debouncers (20ms)
 //              - 4-State Mode FSM with 5s Inactivity Timeout & Time Edit Buffer
 //              - Continuous Background Real-Time Counters (Zero-Drift Clock)
 //              - Dedicated Output Switch MUX for clean display separation
@@ -22,7 +22,6 @@ module hms_timer #(
     parameter int P_CLK_FREQ_HZ        = 1_000_000, // System Clock Frequency (1 MHz)
     parameter int P_PULSE_1KHZ_FREQ_HZ = 1_000,     // 1 kHz sampling rate
     parameter int P_DEBOUNCE_PULSES    = 20,        // 20 pulses of 1 kHz = 20ms
-    parameter int P_DEBOUNCE_TOL_PCT   = 10,        // Debounce Tolerance Percentage (±10%)
     parameter int P_TIMEOUT_SEC        = 5          // Inactivity timeout in seconds (5s)
 )(
     input  logic       clk,        // System Master Clock (1 MHz)
@@ -81,8 +80,7 @@ module hms_timer #(
     // Submodule 2: Multi-Channel Button Controller & Pulse Alignment Subsystem
     //--------------------------------------------------------------------------
     button_controller #(
-        .P_DEBOUNCE_PULSES  (P_DEBOUNCE_PULSES),
-        .P_DEBOUNCE_TOL_PCT (P_DEBOUNCE_TOL_PCT)
+        .P_DEBOUNCE_PULSES (P_DEBOUNCE_PULSES)
     ) u_button_controller (
         .clk        (clk),
         .rstn       (rstn_sync),
@@ -159,6 +157,7 @@ module hms_timer #(
     // Submodule 7: Output Switch Display Multiplexer
     //--------------------------------------------------------------------------
     output_switch u_output_switch (
+        .load_en  (load_en),
         .adj_mode (adj_mode),
         .s_cnt    (s_cnt),
         .m_cnt    (m_cnt),
